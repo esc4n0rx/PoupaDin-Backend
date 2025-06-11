@@ -45,7 +45,7 @@ const login = async (req, res) => {
 
         const user = await userModel.findByEmail(validatedData.email);
         if (!user) {
-            return res.status(401).json({ message: 'Credenciais inválidas.' }); // Nao especifique se o email ou a senha estao errados
+            return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
         const isPasswordCorrect = await comparePassword(validatedData.password, user.password_hash);
@@ -57,10 +57,22 @@ const login = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: '1h' } // Token expira em 1 hora
+            { expiresIn: '1h' }
         );
 
-        res.status(200).json({ message: 'Login bem-sucedido!', token });
+        // Verificar status do setup inicial
+        const setupCompleted = user.initial_setup_completed || false;
+
+        res.status(200).json({ 
+            message: 'Login bem-sucedido!', 
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                initial_setup_completed: setupCompleted
+            }
+        });
 
     } catch (error) {
         if (error instanceof require('zod').ZodError) {
