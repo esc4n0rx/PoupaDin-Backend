@@ -176,6 +176,21 @@ const checkUserSetupStatus = async (userId) => {
     return data?.initial_setup_completed || false;
 };
 
+const createBudgetTransactionWithRecurring = async (transactionData) => {
+    const { data, error } = await supabase
+        .from('budget_transactions')
+        .insert([{
+            ...transactionData,
+            is_recurring: transactionData.is_recurring || false,
+            recurring_transaction_id: transactionData.recurring_transaction_id || null
+        }])
+        .select()
+        .single();
+    
+    if (error) throw error;
+    return data;
+};
+
 module.exports = {
     findActiveBudgetByUserId,
     createBudget,
@@ -189,5 +204,6 @@ module.exports = {
     createBudgetTransaction,
     getTransactionsByBudgetId,
     markUserSetupCompleted,
-    checkUserSetupStatus
+    checkUserSetupStatus,
+    createBudgetTransactionWithRecurring
 };
