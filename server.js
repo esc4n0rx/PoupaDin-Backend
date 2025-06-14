@@ -3,6 +3,7 @@ const express = require('express');
 const authRoutes = require('./src/routes/authRoutes');
 const budgetRoutes = require('./src/routes/budgetRoutes');
 const recurringTransactionRoutes = require('./src/routes/recurringTransactionRoutes');
+const goalRoutes = require('./src/routes/goalRoutes'); // NOVA LINHA
 const CronService = require('./src/services/cronService');
 
 const app = express();
@@ -15,6 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/budget', budgetRoutes);
 app.use('/api/recurring-transactions', recurringTransactionRoutes);
+app.use('/api/goals', goalRoutes); // NOVA LINHA
 
 // Rota de health check
 app.get('/', (req, res) => {
@@ -24,7 +26,8 @@ app.get('/', (req, res) => {
         endpoints: {
             auth: '/api/auth',
             budget: '/api/budget',
-            recurringTransactions: '/api/recurring-transactions'
+            recurringTransactions: '/api/recurring-transactions',
+            goals: '/api/goals' // NOVA LINHA
         }
     });
 });
@@ -43,6 +46,7 @@ const server = app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
     console.log(`📊 Budget API available at http://localhost:${PORT}/api/budget`);
     console.log(`🔄 Recurring Transactions API available at http://localhost:${PORT}/api/recurring-transactions`);
+    console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`); // NOVA LINHA
 });
 
 // Graceful shutdown
