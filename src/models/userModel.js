@@ -1,16 +1,16 @@
- 
+// src/models/userModel.js
 const supabase = require('../config/supabaseClient');
 const crypto = require('crypto');
 
-// Funcoes relacionadas ao usuario
+// Funções relacionadas ao usuário
 const findByEmail = async (email) => {
     const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('email', email)
-        .single(); // .single() retorna um unico objeto em vez de um array
+        .single();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116: 'No rows found'
+    if (error && error.code !== 'PGRST116') {
         throw error;
     }
     return data;
@@ -43,35 +43,43 @@ const updatePassword = async (userId, newPasswordHash) => {
     return data;
 };
 
-// Funcoes relacionadas a redefinicao de senha
-const createPasswordResetToken = async (userId) => {
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+// Funções relacionadas à redefinição de senha com código de 6 dígitos
+const createPasswordResetCode = async (userId) => {
+    // Gerar código de 6 dígitos
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1); // Token expira em 1 hora
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // Código expira em 15 minutos
+
+    // Deletar códigos anteriores do usuário (cleanup)
+    await supabase
+        .from('password_resets')
+        .delete()
+        .eq('user_id', userId);
 
     const { error } = await supabase
         .from('password_resets')
         .insert({
             user_id: userId,
-            token_hash: tokenHash,
-            expires_at: expiresAt.toISOString()
+            reset_code: resetCode,
+            expires_at: expiresAt.toISOString(),
+            used: false
         });
 
     if (error) {
         throw error;
     }
     
-    // Retornamos o token original (nao hasheado) para ser enviado por email
-    return resetToken; 
+    return resetCode;
 };
 
-const findResetToken = async (tokenHash) => {
+const findValidResetCode = async (resetCode) => {
     const { data, error } = await supabase
         .from('password_resets')
         .select('*')
-        .eq('token_hash', tokenHash)
+        .eq('reset_code', resetCode)
+        .eq('used', false)
+        .gte('expires_at', new Date().toISOString())
         .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -80,11 +88,25 @@ const findResetToken = async (tokenHash) => {
     return data;
 };
 
-const deleteResetToken = async (tokenId) => {
+const markResetCodeAsUsed = async (resetId) => {
+    const { error } = await supabase
+        .from('password_resets')
+        .update({ 
+            used: true,
+            used_at: new Date().toISOString()
+        })
+        .eq('id', resetId);
+    
+    if (error) {
+        throw error;
+    }
+};
+
+const deleteExpiredResetCodes = async () => {
     const { error } = await supabase
         .from('password_resets')
         .delete()
-        .eq('id', tokenId);
+        .lt('expires_at', new Date().toISOString());
     
     if (error) {
         throw error;
@@ -95,7 +117,8 @@ module.exports = {
     findByEmail,
     create,
     updatePassword,
-    createPasswordResetToken,
-    findResetToken,
-    deleteResetToken
+    createPasswordResetCode,
+    findValidResetCode,
+    markResetCodeAsUsed,
+    deleteExpiredResetCodes
 };

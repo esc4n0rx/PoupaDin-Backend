@@ -1,12 +1,17 @@
- 
+// src/controllers/authController.js
 const userModel = require('../models/userModel');
 const { hashPassword, comparePassword } = require('../utils/passwordUtils');
-const { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } = require('../schemas/userSchema');
+const { 
+    registerSchema, 
+    loginSchema, 
+    forgotPasswordSchema, 
+    verifyResetCodeSchema,
+    resetPasswordSchema 
+} = require('../schemas/userSchema');
 const { sendPasswordResetEmail } = require('../services/mailService');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 
-// 1. Registro de Usuario
+// 1. Registro de Usuário
 const register = async (req, res) => {
     try {
         const validatedData = registerSchema.parse(req.body);
@@ -25,7 +30,6 @@ const register = async (req, res) => {
             date_of_birth: validatedData.date_of_birth,
         });
         
-        // Nao retorne a senha hasheada
         const { password_hash, ...userResponse } = newUser;
 
         res.status(201).json({ message: 'Usuário registrado com sucesso!', user: userResponse });
@@ -38,7 +42,7 @@ const register = async (req, res) => {
     }
 };
 
-// 2. Login de Usuario
+// 2. Login de Usuário
 const login = async (req, res) => {
     try {
         const validatedData = loginSchema.parse(req.body);
@@ -53,14 +57,12 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
         
-        // Gerar token JWT
         const token = jwt.sign(
             { id: user.id, email: user.email },
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
 
-        // Verificar status do setup inicial
         const setupCompleted = user.initial_setup_completed || false;
 
         res.status(200).json({ 
@@ -83,19 +85,29 @@ const login = async (req, res) => {
     }
 };
 
-// 3. Solicitar Redefinicao de Senha
+// 3. Solicitar Redefinição de Senha
 const forgotPassword = async (req, res) => {
     try {
         const { email } = forgotPasswordSchema.parse(req.body);
 
         const user = await userModel.findByEmail(email);
         if (user) {
-            const resetToken = await userModel.createPasswordResetToken(user.id);
-            await sendPasswordResetEmail(user.email, resetToken);
+            try {
+                const resetCode = await userModel.createPasswordResetCode(user.id);
+                await sendPasswordResetEmail(user.email, resetCode);
+                
+                console.log(`📧 Código de recuperação enviado para ${user.email}: ${resetCode}`);
+            } catch (emailError) {
+                console.error('Erro ao enviar email de recuperação:', emailError);
+                // Não exposar erro específico de email para o usuário
+            }
         }
 
-        // Resposta generica para nao revelar se um email existe no sistema
-        res.status(200).json({ message: 'Se um usuário com este e-mail existir, um link de redefinição de senha foi enviado.' });
+        // Resposta genérica para não revelar se um email existe no sistema
+        res.status(200).json({ 
+            message: 'Se um usuário com este e-mail existir, um código de recuperação foi enviado.',
+            instruction: 'Verifique sua caixa de entrada e spam. O código expira em 15 minutos.'
+        });
 
     } catch (error) {
         if (error instanceof require('zod').ZodError) {
@@ -106,28 +118,61 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// 4. Efetuar a Redefinicao de Senha
+// 4. Verificar Código de Recuperação (opcional - para validação no frontend)
+const verifyResetCode = async (req, res) => {
+    try {
+        const { code } = verifyResetCodeSchema.parse(req.body);
+
+        const resetRequest = await userModel.findValidResetCode(code);
+
+        if (!resetRequest) {
+            return res.status(400).json({ 
+                message: 'Código inválido, expirado ou já utilizado.',
+                code: 'INVALID_CODE'
+            });
+        }
+
+        res.status(200).json({ 
+            message: 'Código válido! Você pode prosseguir com a redefinição da senha.',
+            valid: true
+        });
+
+    } catch (error) {
+        if (error instanceof require('zod').ZodError) {
+            return res.status(400).json({ message: 'Erro de validação.', errors: error.errors });
+        }
+        console.error('Erro ao verificar código:', error);
+        res.status(500).json({ message: 'Erro interno no servidor.' });
+    }
+};
+
+// 5. Efetuar a Redefinição de Senha
 const resetPassword = async (req, res) => {
     try {
-        const { token, password } = resetPasswordSchema.parse(req.body);
+        const { code, password } = resetPasswordSchema.parse(req.body);
 
-        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-        const resetRequest = await userModel.findResetToken(tokenHash);
+        const resetRequest = await userModel.findValidResetCode(code);
 
-        if (!resetRequest || new Date() > new Date(resetRequest.expires_at)) {
-            if (resetRequest) {
-                await userModel.deleteResetToken(resetRequest.id);
-            }
-            return res.status(400).json({ message: 'Token inválido ou expirado.' });
+        if (!resetRequest) {
+            return res.status(400).json({ 
+                message: 'Código inválido, expirado ou já utilizado.',
+                code: 'INVALID_CODE'
+            });
         }
         
         const newPasswordHash = await hashPassword(password);
         await userModel.updatePassword(resetRequest.user_id, newPasswordHash);
         
-        // O token foi usado, entao deve ser deletado
-        await userModel.deleteResetToken(resetRequest.id);
+        // Marcar código como usado
+        await userModel.markResetCodeAsUsed(resetRequest.id);
 
-        res.status(200).json({ message: 'Senha redefinida com sucesso.' });
+        console.log(`🔐 Senha redefinida com sucesso para usuário ID: ${resetRequest.user_id}`);
+
+        res.status(200).json({ 
+            message: 'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.',
+            success: true
+        });
+
     } catch (error) {
         if (error instanceof require('zod').ZodError) {
             return res.status(400).json({ message: 'Erro de validação.', errors: error.errors });
@@ -137,10 +182,10 @@ const resetPassword = async (req, res) => {
     }
 };
 
-
 module.exports = {
     register,
     login,
     forgotPassword,
+    verifyResetCode,
     resetPassword
 };
