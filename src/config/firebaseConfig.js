@@ -9,7 +9,6 @@ const initializeFirebase = () => {
     }
 
     try {
-        // Para produção, use arquivo de credenciais
         if (process.env.FIREBASE_CREDENTIAL_PATH) {
             const serviceAccount = require(process.env.FIREBASE_CREDENTIAL_PATH);
             firebaseApp = admin.initializeApp({
@@ -17,7 +16,6 @@ const initializeFirebase = () => {
                 projectId: process.env.FIREBASE_PROJECT_ID
             });
         } 
-        // Para desenvolvimento, use variáveis de ambiente
         else if (process.env.FIREBASE_PRIVATE_KEY) {
             const serviceAccount = {
                 type: "service_account",
