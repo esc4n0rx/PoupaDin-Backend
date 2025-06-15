@@ -12,7 +12,6 @@ WORKDIR /usr/src/app
 
 # Copiar arquivos de dependências
 COPY package*.json ./
-COPY pnpm-lock.yaml* ./
 
 # Instalar pnpm globalmente
 RUN npm install -g pnpm
@@ -26,14 +25,26 @@ RUN mkdir -p /usr/src/app/config/firebase
 # Copiar código fonte
 COPY . .
 
-# Copiar credenciais Firebase (se existir)
-COPY config/firebase/firebase-service-account.json /usr/src/app/config/firebase/firebase-service-account.json 2>/dev/null || true
+# Criar script de entrada
+RUN echo '#!/bin/sh\n\
+echo "🚀 Iniciando PoupaDin Backend..."\n\
+mkdir -p /usr/src/app/config/firebase\n\
+if [ ! -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then\n\
+    echo "🔥 Configurando credenciais Firebase..."\n\
+    echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > /usr/src/app/config/firebase/firebase-service-account.json\n\
+    chmod 644 /usr/src/app/config/firebase/firebase-service-account.json\n\
+    export FIREBASE_CREDENTIAL_PATH=/usr/src/app/config/firebase/firebase-service-account.json\n\
+    echo "✅ Credenciais Firebase configuradas!"\n\
+else\n\
+    echo "⚠️ FIREBASE_SERVICE_ACCOUNT_JSON não definida, Firebase será desabilitado"\n\
+fi\n\
+exec node server.js' > /usr/local/bin/entrypoint.sh
 
-# Definir variável de ambiente para o Firebase
-ENV FIREBASE_CREDENTIAL_PATH=/usr/src/app/config/firebase/firebase-service-account.json
+# Tornar script executável
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Expor porta
 EXPOSE 3000
 
-# Comando para iniciar a aplicação
-CMD ["node", "server.js"]
+# Usar script de entrada
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
