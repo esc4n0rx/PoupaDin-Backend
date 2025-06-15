@@ -19,26 +19,58 @@ const initializeFirebase = () => {
         if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
             console.log('📋 Carregando Firebase via variável de ambiente JSON');
             try {
-                // Parse do JSON
-                const rawServiceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+                let jsonString = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
                 
-                // CORREÇÃO: Processar a private key para converter \n em quebras de linha reais
+                // CORREÇÃO: Verificar se está double-escaped e corrigir
+                console.log('🔍 Primeiros 50 chars originais:', jsonString.substring(0, 50));
+                
+                // Se começar com aspas escapadas, provavelmente está double-escaped
+                if (jsonString.startsWith('{\\"') || jsonString.includes('\\"')) {
+                    console.log('🔧 Detectado double-escape, corrigindo...');
+                    // Remover escapes extras
+                    jsonString = jsonString.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                    console.log('🔍 Após correção:', jsonString.substring(0, 50));
+                }
+                
+                // Parse do JSON
+                const rawServiceAccount = JSON.parse(jsonString);
+                
+                // Processar a private key para converter \n em quebras de linha reais
                 if (rawServiceAccount.private_key) {
                     rawServiceAccount.private_key = rawServiceAccount.private_key.replace(/\\n/g, '\n');
+                    console.log('🔑 Private key processada com sucesso');
                 }
                 
                 serviceAccount = rawServiceAccount;
-                initMethod = 'variável de ambiente JSON (com correção de private key)';
-                
-                console.log('🔑 Private key processada com sucesso');
+                initMethod = 'variável de ambiente JSON (com correção de double-escape)';
                 
             } catch (parseError) {
                 console.error('❌ Erro ao fazer parse do JSON do Firebase:', parseError.message);
                 
-                // Debug: mostrar primeiros caracteres
+                // Debug detalhado
                 const jsonStr = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-                console.error('🔍 Primeiros 100 chars do JSON:', jsonStr?.substring(0, 100));
-                console.error('🔍 Últimos 100 chars do JSON:', jsonStr?.substring(jsonStr.length - 100));
+                console.error('🔍 Tentando parse direto...');
+                console.error('🔍 Tamanho do JSON:', jsonStr?.length);
+                console.error('🔍 Primeiro char code:', jsonStr?.charCodeAt(0));
+                console.error('🔍 Contém \\":', jsonStr?.includes('\\"'));
+                
+                // Tentar método alternativo - remover todas as aspas escapadas
+                try {
+                    console.log('🔧 Tentando método alternativo...');
+                    let cleanJson = jsonStr
+                        .replace(/\\"/g, '"')  // \" -> "
+                        .replace(/\\\\/g, '\\'); // \\ -> \
+                    
+                    const altServiceAccount = JSON.parse(cleanJson);
+                    if (altServiceAccount.private_key) {
+                        altServiceAccount.private_key = altServiceAccount.private_key.replace(/\\n/g, '\n');
+                    }
+                    serviceAccount = altServiceAccount;
+                    initMethod = 'método alternativo de parse';
+                    console.log('✅ Método alternativo funcionou!');
+                } catch (altError) {
+                    console.error('❌ Método alternativo também falhou:', altError.message);
+                }
             }
         }
         
@@ -51,13 +83,12 @@ const initializeFirebase = () => {
                     const fileContent = fs.readFileSync(credentialPath, 'utf8');
                     const rawServiceAccount = JSON.parse(fileContent);
                     
-                    // Mesma correção para arquivo
                     if (rawServiceAccount.private_key) {
                         rawServiceAccount.private_key = rawServiceAccount.private_key.replace(/\\n/g, '\n');
                     }
                     
                     serviceAccount = rawServiceAccount;
-                    initMethod = 'arquivo JSON (com correção de private key)';
+                    initMethod = 'arquivo JSON';
                 } catch (fileError) {
                     console.error('❌ Erro ao processar arquivo JSON:', fileError.message);
                 }
@@ -70,12 +101,9 @@ const initializeFirebase = () => {
             
             let privateKey = process.env.FIREBASE_PRIVATE_KEY;
             
-            // Processar private key baseado no formato
             if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
-                // Se estiver em base64, decodificar
                 privateKey = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_BASE64, 'base64').toString('utf-8');
             } else {
-                // Processar escape de \n
                 privateKey = privateKey.replace(/\\n/g, '\n');
             }
             
@@ -91,13 +119,14 @@ const initializeFirebase = () => {
                 auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
                 client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL}`
             };
-            initMethod = 'variáveis individuais (com correção de private key)';
+            initMethod = 'variáveis individuais';
         }
 
         if (serviceAccount) {
             // Verificar se a private key parece válida
             if (serviceAccount.private_key && !serviceAccount.private_key.includes('BEGIN PRIVATE KEY')) {
                 console.warn('⚠️ Private key pode estar corrompida - não contém "BEGIN PRIVATE KEY"');
+                console.warn('🔍 Primeiros 100 chars da private key:', serviceAccount.private_key.substring(0, 100));
             }
             
             firebaseApp = admin.initializeApp({
@@ -115,12 +144,11 @@ const initializeFirebase = () => {
     } catch (error) {
         console.error('❌ Erro ao inicializar Firebase:', error.message);
         
-        // Se for erro de private key inválida, dar dica específica
         if (error.message.includes('Invalid PEM') || error.message.includes('Failed to parse private key')) {
-            console.error('💡 Dica: Problema comum com private key. Verifique se:');
-            console.error('   1. A private key não tem \\n extras no final');
-            console.error('   2. O JSON está formatado corretamente');
-            console.error('   3. Não há caracteres especiais corrompidos');
+            console.error('💡 Dica: Problema com private key. Possíveis soluções:');
+            console.error('   1. JSON pode estar double-escaped pelo Coolify');
+            console.error('   2. Private key pode ter caracteres corrompidos');
+            console.error('   3. Tente usar variáveis individuais em vez do JSON completo');
         }
         
         return null;
