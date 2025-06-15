@@ -1,0 +1,32 @@
+# docker-compose.coolify.yml
+version: '3.8'
+
+services:
+  poupadin-api:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL}
+      FIREBASE_CREDENTIAL_PATH: /usr/src/app/config/firebase/firebase-service-account.json
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+    volumes:
+      - firebase-creds:/usr/src/app/config/firebase
+    depends_on:
+      - firebase-setup
+
+  firebase-setup:
+    image: alpine:latest
+    volumes:
+      - firebase-creds:/firebase-config
+    environment:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
+    command: sh -c "echo '$$FIREBASE_SERVICE_ACCOUNT_JSON' > /firebase-config/firebase-service-account.json && chmod 644 /firebase-config/firebase-service-account.json"
+
+volumes:
+  firebase-creds:
