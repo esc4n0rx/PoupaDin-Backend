@@ -1,4 +1,5 @@
 const goalModel = require('../models/goalModel');
+const NotificationService = require('./notificationService');
 
 class GoalService {
     
@@ -119,12 +120,38 @@ class GoalService {
         
         // Atualizar valor do objetivo
         const updatedGoal = await goalModel.updateGoalAmount(goal_id, newAmount);
-        
-        // Verificar se objetivo foi completado
-        if (newAmount >= parseFloat(goal.target_amount) && !goal.is_completed) {
-            await goalModel.markGoalAsCompleted(goal_id);
-            updatedGoal.is_completed = true;
-            updatedGoal.completed_at = new Date().toISOString();
+
+
+         // NOVA FUNCIONALIDADE: Verificar marcos e completude
+        if (transaction_type === 'deposit') {
+            const targetAmount = parseFloat(goal.target_amount);
+            const progressPercentage = (newAmount / targetAmount) * 100;
+            
+            // Verificar marcos importantes (25%, 50%, 75%)
+            const oldProgressPercentage = (currentAmount / targetAmount) * 100;
+            
+            const milestones = [25, 50, 75];
+            for (const milestone of milestones) {
+                if (oldProgressPercentage < milestone && progressPercentage >= milestone) {
+                    await NotificationService.sendGoalMilestone(userId, {
+                        ...goal,
+                        current_amount: newAmount
+                    }, progressPercentage);
+                    break; // Enviar apenas um marco por transação
+                }
+            }
+            
+            // Verificar se objetivo foi completado
+            if (newAmount >= targetAmount && !goal.is_completed) {
+                await goalModel.markGoalAsCompleted(goal_id);
+                updatedGoal.is_completed = true;
+                updatedGoal.completed_at = new Date().toISOString();
+                
+                await NotificationService.sendGoalCompleted(userId, {
+                    ...goal,
+                    current_amount: newAmount
+                });
+            }
         }
         
         return {

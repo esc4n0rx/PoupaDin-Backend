@@ -1,4 +1,5 @@
 const budgetModel = require('../models/budgetModel');
+const NotificationService = require('./notificationService');
 
 class BudgetService {
     
@@ -69,7 +70,6 @@ class BudgetService {
         return budget;
     }
 
-    // Processar despesa em categoria
     static async processExpense(userId, expenseData) {
         const { category_id, amount, description } = expenseData;
         
@@ -102,6 +102,26 @@ class BudgetService {
             amount: amount,
             description: description
         });
+
+        const usagePercentage = ((category.allocated_amount - newBalance) / category.allocated_amount) * 100;
+        
+        // Enviar alerta se estiver próximo do limite (80%, 90%, 100%)
+        if (usagePercentage >= 80 && usagePercentage < 90) {
+            await NotificationService.sendBudgetAlert(userId, {
+                ...category,
+                remaining: newBalance
+            }, usagePercentage);
+        } else if (usagePercentage >= 90 && usagePercentage < 100) {
+            await NotificationService.sendBudgetAlert(userId, {
+                ...category,
+                remaining: newBalance
+            }, usagePercentage);
+        } else if (usagePercentage >= 100) {
+            await NotificationService.sendBudgetAlert(userId, {
+                ...category,
+                remaining: newBalance
+            }, usagePercentage);
+        }
         
         return { success: true, new_balance: newBalance };
     }
