@@ -1,11 +1,7 @@
 FROM node:18-alpine
 
 # Instalar dependências do sistema
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/cache/apk/*
+RUN apk add --no-cache python3 make g++
 
 # Criar diretório da aplicação
 WORKDIR /usr/src/app
@@ -13,11 +9,8 @@ WORKDIR /usr/src/app
 # Copiar arquivos de dependências
 COPY package*.json ./
 
-# Instalar pnpm globalmente
-RUN npm install -g pnpm
-
-# Instalar dependências
-RUN pnpm install --frozen-lockfile --prod
+# Instalar dependências usando npm
+RUN npm ci --only=production
 
 # Criar diretório para credenciais Firebase
 RUN mkdir -p /usr/src/app/config/firebase
@@ -25,7 +18,7 @@ RUN mkdir -p /usr/src/app/config/firebase
 # Copiar código fonte
 COPY . .
 
-# Criar script de entrada
+# Criar script de entrada inline
 RUN echo '#!/bin/sh\n\
 echo "🚀 Iniciando PoupaDin Backend..."\n\
 mkdir -p /usr/src/app/config/firebase\n\
