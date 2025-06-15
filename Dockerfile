@@ -1,4 +1,3 @@
-# Dockerfile
 FROM node:18-alpine
 
 # Instalar dependências do sistema
@@ -21,11 +20,17 @@ RUN npm install -g pnpm
 # Instalar dependências
 RUN pnpm install --frozen-lockfile --prod
 
+# Criar diretório para credenciais Firebase
+RUN mkdir -p /usr/src/app/config/firebase
+
 # Copiar código fonte
 COPY . .
 
-# Criar diretório para credenciais Firebase
-RUN mkdir -p /usr/src/app/config/firebase
+# Copiar credenciais Firebase (se existir)
+COPY config/firebase/firebase-service-account.json /usr/src/app/config/firebase/firebase-service-account.json 2>/dev/null || true
+
+# Definir variável de ambiente para o Firebase
+ENV FIREBASE_CREDENTIAL_PATH=/usr/src/app/config/firebase/firebase-service-account.json
 
 # Expor porta
 EXPOSE 3000
