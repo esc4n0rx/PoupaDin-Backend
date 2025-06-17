@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const envConfig = require('./src/config/envConfig');
 const authRoutes = require('./src/routes/authRoutes');
 const budgetRoutes = require('./src/routes/budgetRoutes');
 const recurringTransactionRoutes = require('./src/routes/recurringTransactionRoutes');
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
     res.status(200).json({ 
         status: 'API is running',
         version: '1.0.0',
+        tokenConfig: TokenUtils.getConfigInfo(),
         endpoints: {
             auth: '/api/auth',
             budget: '/api/budget',

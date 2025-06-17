@@ -1,68 +1,134 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { tokenConfig } = require('../config/envConfig'); // NOVA LINHA
 
 /**
  * Utilitários para geração e validação de tokens JWT
+ * Versão corrigida com melhor tratamento de configurações
  */
 class TokenUtils {
     
     // Gerar Access Token (curta duração)
     static generateAccessToken(payload) {
-        if (!process.env.ACCESS_TOKEN_SECRET) {
-            throw new Error('ACCESS_TOKEN_SECRET não configurado');
-        }
-        
-        return jwt.sign(
-            payload,
-            process.env.ACCESS_TOKEN_SECRET,
-            { 
-                expiresIn: process.env.ACCESS_TOKEN_EXPIRATION || '15m',
-                issuer: 'poupadin-api',
-                audience: 'poupadin-app'
+        try {
+            const config = tokenConfig.accessToken;
+            
+            // Validar payload
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('Payload deve ser um objeto válido');
             }
-        );
+            
+            // Validar campos obrigatórios
+            if (!payload.id || !payload.email) {
+                throw new Error('Payload deve conter id e email');
+            }
+            
+            console.log(`🔑 Gerando access token com expiração: ${config.expiresIn}`);
+            
+            return jwt.sign(
+                payload,
+                config.secret,
+                { 
+                    expiresIn: config.expiresIn,
+                    issuer: config.issuer,
+                    audience: config.audience,
+                    subject: payload.id.toString() // Garantir que seja string
+                }
+            );
+        } catch (error) {
+            console.error('❌ Erro ao gerar access token:', error.message);
+            throw new Error(`Falha na geração do access token: ${error.message}`);
+        }
     }
     
     // Gerar Refresh Token (longa duração)
     static generateRefreshToken(payload) {
-        if (!process.env.REFRESH_TOKEN_SECRET) {
-            throw new Error('REFRESH_TOKEN_SECRET não configurado');
-        }
-        
-        return jwt.sign(
-            payload,
-            process.env.REFRESH_TOKEN_SECRET,
-            { 
-                expiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '90d',
-                issuer: 'poupadin-api',
-                audience: 'poupadin-app'
+        try {
+            const config = tokenConfig.refreshToken;
+            
+            // Validar payload
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('Payload deve ser um objeto válido');
             }
-        );
+            
+            // Validar campos obrigatórios
+            if (!payload.id || !payload.email) {
+                throw new Error('Payload deve conter id e email');
+            }
+            
+            console.log(`🔑 Gerando refresh token com expiração: ${config.expiresIn}`);
+            
+            return jwt.sign(
+                payload,
+                config.secret,
+                { 
+                    expiresIn: config.expiresIn,
+                    issuer: config.issuer,
+                    audience: config.audience,
+                    subject: payload.id.toString() // Garantir que seja string
+                }
+            );
+        } catch (error) {
+            console.error('❌ Erro ao gerar refresh token:', error.message);
+            throw new Error(`Falha na geração do refresh token: ${error.message}`);
+        }
     }
     
     // Verificar Access Token
     static verifyAccessToken(token) {
-        if (!process.env.ACCESS_TOKEN_SECRET) {
-            throw new Error('ACCESS_TOKEN_SECRET não configurado');
+        try {
+            const config = tokenConfig.accessToken;
+            
+            if (!token) {
+                throw new Error('Token não fornecido');
+            }
+            
+            return jwt.verify(token, config.secret, {
+                issuer: config.issuer,
+                audience: config.audience
+            });
+        } catch (error) {
+            // Re-throw com informação mais específica mantendo o tipo original
+            if (error.name === 'TokenExpiredError') {
+                const expiredError = new Error('Token expirado');
+                expiredError.name = 'TokenExpiredError';
+                throw expiredError;
+            } else if (error.name === 'JsonWebTokenError') {
+                const invalidError = new Error('Token inválido');
+                invalidError.name = 'JsonWebTokenError';
+                throw invalidError;
+            }
+            throw error;
         }
-        
-        return jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
-            issuer: 'poupadin-api',
-            audience: 'poupadin-app'
-        });
     }
     
     // Verificar Refresh Token
     static verifyRefreshToken(token) {
-        if (!process.env.REFRESH_TOKEN_SECRET) {
-            throw new Error('REFRESH_TOKEN_SECRET não configurado');
+        try {
+            const config = tokenConfig.refreshToken;
+            
+            if (!token) {
+                throw new Error('Refresh token não fornecido');
+            }
+            
+            return jwt.verify(token, config.secret, {
+                issuer: config.issuer,
+                audience: config.audience
+            });
+        } catch (error) {
+            // Re-throw com informação mais específica mantendo o tipo original
+            if (error.name === 'TokenExpiredError') {
+                const expiredError = new Error('Refresh token expirado');
+                expiredError.name = 'TokenExpiredError';
+                throw expiredError;
+            } else if (error.name === 'JsonWebTokenError') {
+                const invalidError = new Error('Refresh token inválido');
+                invalidError.name = 'JsonWebTokenError';
+                throw invalidError;
+            }
+            throw error;
         }
-        
-        return jwt.verify(token, process.env.REFRESH_TOKEN_SECRET, {
-            issuer: 'poupadin-api',
-            audience: 'poupadin-app'
-        });
     }
     
     // Gerar token aleatório para hash
@@ -99,6 +165,16 @@ class TokenUtils {
         } catch (error) {
             return true; // Se não conseguir decodificar, assumir que precisa renovar
         }
+    }
+    
+    // NOVA FUNÇÃO: Debug de configurações (sem expor secrets)
+    static getConfigInfo() {
+        return {
+            accessTokenExpiration: tokenConfig.accessToken.expiresIn,
+            refreshTokenExpiration: tokenConfig.refreshToken.expiresIn,
+            issuer: tokenConfig.accessToken.issuer,
+            audience: tokenConfig.accessToken.audience
+        };
     }
 }
 
