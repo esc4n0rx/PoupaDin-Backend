@@ -13,6 +13,9 @@ class CronService {
         // Processar transações recorrentes todos os dias às 09:00 no horário de SP
         this.scheduleRecurringTransactionsProcessor();
         
+        //
+        this.scheduleTokenCleanup();
+        
         // NOVA FUNCIONALIDADE: Processar notificações pendentes a cada 5 minutos
         this.scheduleNotificationProcessor();
         
@@ -23,8 +26,36 @@ class CronService {
         this.scheduleTokenCleanup();
         
         console.log('✅ Serviços de cron inicializados com sucesso!');
+
+        
     }
     
+    
+    static scheduleTokenCleanup() {
+        const taskName = 'token-cleanup';
+        
+        // Executar limpeza diária às 02:00
+        const task = cron.schedule('0 2 * * *', async () => {
+            console.log('🧹 Executando limpeza de tokens expirados...');
+            
+            try {
+                const { runFullCleanup } = require('../utils/cleanupUtils');
+                const result = await runFullCleanup();
+                
+                console.log('✅ Limpeza de tokens concluída:', result);
+            } catch (error) {
+                console.error('💥 Erro na limpeza de tokens:', error);
+            }
+        }, {
+            scheduled: true,
+            timezone: "America/Sao_Paulo"
+        });
+        
+        this.scheduledTasks.set(taskName, task);
+        console.log(`📅 Agendado: ${taskName} - todos os dias às 02:00 (SP)`);
+    }
+
+
     // Agendar processamento de transações recorrentes
     static scheduleRecurringTransactionsProcessor() {
         const taskName = 'recurring-transactions-processor';

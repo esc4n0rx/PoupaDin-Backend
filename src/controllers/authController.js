@@ -1,6 +1,8 @@
 // src/controllers/authController.js
 const userModel = require('../models/userModel');
+const RefreshTokenModel = require('../models/refreshTokenModel'); // NOVA LINHA
 const { hashPassword, comparePassword } = require('../utils/passwordUtils');
+const TokenUtils = require('../utils/tokenUtils'); // NOVA LINHA
 const { 
     registerSchema, 
     loginSchema, 
@@ -9,9 +11,9 @@ const {
     resetPasswordSchema 
 } = require('../schemas/userSchema');
 const { sendPasswordResetEmail } = require('../services/mailService');
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken'); // Manter para compatibilidade temporária
 
-// 1. Registro de Usuário
+// 1. Registro de Usuário (sem mudanças)
 const register = async (req, res) => {
     try {
         const validatedData = registerSchema.parse(req.body);
@@ -42,7 +44,7 @@ const register = async (req, res) => {
     }
 };
 
-// 2. Login de Usuário
+// 2. Login de Usuário (MODIFICADO para incluir refresh token)
 const login = async (req, res) => {
     try {
         const validatedData = loginSchema.parse(req.body);
@@ -57,17 +59,31 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
         
-        const token = jwt.sign(
-            { id: user.id, email: user.email },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
+        // NOVO: Gerar access token e refresh token usando TokenUtils
+        const accessToken = TokenUtils.generateAccessToken({
+            id: user.id,
+            email: user.email
+        });
+        
+        const refreshToken = TokenUtils.generateRefreshToken({
+            id: user.id,
+            email: user.email
+        });
+        
+        // NOVO: Salvar refresh token no banco de dados
+        await RefreshTokenModel.create(user.id, refreshToken);
+        
+        // NOVO: Limitar número de tokens por usuário (máximo 5 dispositivos)
+        await RefreshTokenModel.limitUserTokens(user.id, 5);
 
         const setupCompleted = user.initial_setup_completed || false;
 
+        console.log(`✅ Login realizado com sucesso: ${user.email}`);
+
         res.status(200).json({ 
             message: 'Login bem-sucedido!', 
-            token,
+            accessToken,        // MODIFICADO: era 'token'
+            refreshToken,       // NOVO: refresh token
             user: {
                 id: user.id,
                 name: user.name,
@@ -85,7 +101,7 @@ const login = async (req, res) => {
     }
 };
 
-// 3. Solicitar Redefinição de Senha
+// 3. Solicitar Redefinição de Senha (sem mudanças)
 const forgotPassword = async (req, res) => {
     try {
         const { email } = forgotPasswordSchema.parse(req.body);
@@ -118,7 +134,7 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// 4. Verificar Código de Recuperação (opcional - para validação no frontend)
+// 4. Verificar Código de Recuperação (sem mudanças)
 const verifyResetCode = async (req, res) => {
     try {
         const { code } = verifyResetCodeSchema.parse(req.body);
@@ -146,7 +162,7 @@ const verifyResetCode = async (req, res) => {
     }
 };
 
-// 5. Efetuar a Redefinição de Senha
+// 5. Efetuar a Redefinição de Senha (MODIFICADO para revogar refresh tokens)
 const resetPassword = async (req, res) => {
     try {
         const { code, password } = resetPasswordSchema.parse(req.body);
@@ -165,12 +181,16 @@ const resetPassword = async (req, res) => {
         
         // Marcar código como usado
         await userModel.markResetCodeAsUsed(resetRequest.id);
+        
+        // NOVO: Revogar todos os refresh tokens por segurança
+        await RefreshTokenModel.revokeAllUserTokens(resetRequest.user_id);
 
-        console.log(`🔐 Senha redefinida com sucesso para usuário ID: ${resetRequest.user_id}`);
+        console.log(`🔐 Senha redefinida e tokens revogados para usuário ID: ${resetRequest.user_id}`);
 
         res.status(200).json({ 
-            message: 'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.',
-            success: true
+            message: 'Senha redefinida com sucesso! Faça login novamente com sua nova senha.',
+            success: true,
+            logoutRequired: true // NOVO: indica que o usuário precisa fazer login novamente
         });
 
     } catch (error) {

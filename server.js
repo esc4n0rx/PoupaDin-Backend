@@ -7,7 +7,8 @@ const goalRoutes = require('./src/routes/goalRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const CronService = require('./src/services/cronService');
 const { initializeFirebase } = require('./src/config/firebaseConfig');
-const { initializeTemplates } = require('./src/scripts/initializeNotificationTemplates'); // NOVA LINHA
+const { initializeTemplates } = require('./src/scripts/initializeNotificationTemplates');
+const { runFullCleanup } = require('./src/utils/cleanupUtils'); // MODIFICADO
 
 const app = express();
 
@@ -43,7 +44,7 @@ app.get('/api/system/cron-status', (req, res) => {
     res.status(200).json({ cron_tasks: status });
 });
 
-// NOVA ROTA: Executar tarefas de notificação manualmente
+// Rota para executar tarefas de notificação manualmente
 app.post('/api/system/run-notifications', async (req, res) => {
     try {
         const result = await CronService.runNotificationTasksNow();
@@ -54,10 +55,41 @@ app.post('/api/system/run-notifications', async (req, res) => {
     }
 });
 
+// NOVA ROTA: Executar limpeza manual
+app.post('/api/system/cleanup', async (req, res) => {
+    try {
+        const result = await runFullCleanup();
+        res.status(200).json({ 
+            message: 'Limpeza executada com sucesso!', 
+            result 
+        });
+    } catch (error) {
+        console.error('Erro ao executar limpeza:', error);
+        res.status(500).json({ message: 'Erro ao executar limpeza.' });
+    }
+});
+
 // Função de inicialização
 async function initializeApp() {
     try {
         console.log('🚀 Inicializando PoupaDin Backend...');
+        
+        // Verificar variáveis de ambiente críticas
+        const requiredEnvVars = [
+            'ACCESS_TOKEN_SECRET',
+            'REFRESH_TOKEN_SECRET',
+            'ACCESS_TOKEN_EXPIRATION',
+            'REFRESH_TOKEN_EXPIRATION'
+        ];
+        
+        const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+        if (missingVars.length > 0) {
+            console.error('❌ Variáveis de ambiente obrigatórias não configuradas:');
+            missingVars.forEach(varName => console.error(`   - ${varName}`));
+            throw new Error('Configuração incompleta');
+        }
+        
+        console.log('✅ Variáveis de ambiente de autenticação configuradas');
         
         // Inicializar Firebase
         console.log('🔥 Inicializando Firebase...');
@@ -71,16 +103,22 @@ async function initializeApp() {
         console.log('⏰ Inicializando serviços de cron...');
         CronService.init();
         
+        // NOVO: Executar limpeza inicial
+        console.log('🧹 Executando limpeza inicial...');
+        await runFullCleanup();
+        
         console.log('✅ Inicialização concluída com sucesso!');
         
     } catch (error) {
         console.error('💥 Erro na inicialização:', error);
+        process.exit(1); // Parar aplicação se configuração estiver incorreta
     }
 }
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, async () => {
     console.log(`🚀 Server is running on port ${PORT}`);
+    console.log(`🔐 Auth API available at http://localhost:${PORT}/api/auth`);
     console.log(`📊 Budget API available at http://localhost:${PORT}/api/budget`);
     console.log(`🔄 Recurring Transactions API available at http://localhost:${PORT}/api/recurring-transactions`);
     console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`);
