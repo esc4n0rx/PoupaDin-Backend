@@ -1,8 +1,8 @@
-// src/controllers/authController.js
 const userModel = require('../models/userModel');
-const RefreshTokenModel = require('../models/refreshTokenModel'); // NOVA LINHA
+const RefreshTokenModel = require('../models/refreshTokenModel');
 const { hashPassword, comparePassword } = require('../utils/passwordUtils');
-const TokenUtils = require('../utils/tokenUtils'); // NOVA LINHA
+const UserProfileService = require('../services/userProfileService');
+const TokenUtils = require('../utils/tokenUtils'); 
 const { 
     registerSchema, 
     loginSchema, 
@@ -11,9 +11,8 @@ const {
     resetPasswordSchema 
 } = require('../schemas/userSchema');
 const { sendPasswordResetEmail } = require('../services/mailService');
-const jwt = require('jsonwebtoken'); // Manter para compatibilidade temporária
+const jwt = require('jsonwebtoken');
 
-// 1. Registro de Usuário (sem mudanças)
 const register = async (req, res) => {
     try {
         const validatedData = registerSchema.parse(req.body);
@@ -32,9 +31,20 @@ const register = async (req, res) => {
             date_of_birth: validatedData.date_of_birth,
         });
         
+        try {
+            await UserProfileService.createDefaultProfile(newUser.id, validatedData);
+            console.log(`✅ Perfil básico criado para novo usuário: ${newUser.email}`);
+        } catch (profileError) {
+            console.error('⚠️ Erro ao criar perfil básico:', profileError);
+            // Não falhar o registro se não conseguir criar o perfil
+        }
+        
         const { password_hash, ...userResponse } = newUser;
 
-        res.status(201).json({ message: 'Usuário registrado com sucesso!', user: userResponse });
+        res.status(201).json({ 
+            message: 'Usuário registrado com sucesso!', 
+            user: userResponse 
+        });
     } catch (error) {
         if (error instanceof require('zod').ZodError) {
             return res.status(400).json({ message: 'Erro de validação.', errors: error.errors });

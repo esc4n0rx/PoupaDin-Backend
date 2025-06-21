@@ -118,6 +118,15 @@ const DEFAULT_TEMPLATES = [
         action_data: { screen: 'home' },
         icon: 'heart',
         color: '#EC4899'
+    },
+     {
+        type: 'profile_updated',
+        title_template: '✅ Perfil atualizado!',
+        body_template: 'Suas informações foram atualizadas com sucesso: {{changes}}',
+        action_type: 'open_app',
+        action_data: { screen: 'profile' },
+        icon: 'user',
+        color: '#10B981'
     }
 ];
 

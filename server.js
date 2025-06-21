@@ -9,11 +9,12 @@ const notificationRoutes = require('./src/routes/notificationRoutes');
 const CronService = require('./src/services/cronService');
 const { initializeFirebase } = require('./src/config/firebaseConfig');
 const { initializeTemplates } = require('./src/scripts/initializeNotificationTemplates');
-const { runFullCleanup } = require('./src/utils/cleanupUtils'); // MODIFICADO
-
+const { runFullCleanup } = require('./src/utils/cleanupUtils');
+const userProfileRoutes = require('./src/routes/userProfileRoutes');
+const StorageUtils = require('./src/utils/storageUtils');
 const app = express();
 
-// Middlewares essenciais
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -23,6 +24,7 @@ app.use('/api/budget', budgetRoutes);
 app.use('/api/recurring-transactions', recurringTransactionRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/profile', userProfileRoutes);
 
 // Rota de health check
 app.get('/', (req, res) => {
@@ -71,6 +73,25 @@ app.post('/api/system/cleanup', async (req, res) => {
     }
 });
 
+app.get('/api/system/storage-status', async (req, res) => {
+    try {
+        const health = await StorageUtils.checkHealth();
+        
+        res.status(200).json({
+            storage_provider: 'cloudinary',
+            status: health.status,
+            message: health.message,
+            cloud_name: health.cloudName,
+            max_file_size: StorageUtils.MAX_FILE_SIZE,
+            allowed_types: StorageUtils.ALLOWED_TYPES,
+            timestamp: health.timestamp
+        });
+    } catch (error) {
+        console.error('Erro ao verificar status do storage:', error);
+        res.status(500).json({ message: 'Erro ao verificar storage' });
+    }
+});
+
 // Função de inicialização
 async function initializeApp() {
     try {
@@ -96,6 +117,9 @@ async function initializeApp() {
         // Inicializar Firebase
         console.log('🔥 Inicializando Firebase...');
         initializeFirebase();
+
+        console.log('🖼️ Configurando Cloudinary...');
+        await StorageUtils.initialize();
         
         // Inicializar templates de notificação
         console.log('📋 Inicializando templates de notificação...');
