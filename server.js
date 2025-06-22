@@ -1,24 +1,32 @@
 require('dotenv').config();
 const express = require('express');
+const { getCorsMiddleware, corsDebugMiddleware, corsErrorHandler } = require('./src/middlewares/corsMiddleware'); // NOVO
 const envConfig = require('./src/config/envConfig');
 const authRoutes = require('./src/routes/authRoutes');
 const budgetRoutes = require('./src/routes/budgetRoutes');
 const recurringTransactionRoutes = require('./src/routes/recurringTransactionRoutes');
 const goalRoutes = require('./src/routes/goalRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
+const userProfileRoutes = require('./src/routes/userProfileRoutes');
 const CronService = require('./src/services/cronService');
 const { initializeFirebase } = require('./src/config/firebaseConfig');
 const { initializeTemplates } = require('./src/scripts/initializeNotificationTemplates');
 const { runFullCleanup } = require('./src/utils/cleanupUtils');
-const userProfileRoutes = require('./src/routes/userProfileRoutes');
 const StorageUtils = require('./src/utils/storageUtils');
+const TokenUtils = require('./src/utils/tokenUtils'); // CORREÇÃO: import estava faltando
+
 const app = express();
 
+// NOVO: Aplicar CORS antes de qualquer rota
+console.log('🌐 Configurando CORS...');
+app.use(corsDebugMiddleware);
+app.use(getCorsMiddleware());
 
+// Middlewares existentes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rotas da API
+// Rotas da API (sem mudanças)
 app.use('/api/auth', authRoutes);
 app.use('/api/budget', budgetRoutes);
 app.use('/api/recurring-transactions', recurringTransactionRoutes);
@@ -26,29 +34,46 @@ app.use('/api/goals', goalRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/profile', userProfileRoutes);
 
-// Rota de health check
+// Rota de health check (atualizada)
 app.get('/', (req, res) => {
+    const { getAllowedOrigins } = require('./src/config/corsConfig');
+    
     res.status(200).json({ 
         status: 'API is running',
         version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        cors: {
+            enabled: true,
+            allowedOrigins: getAllowedOrigins()
+        },
         tokenConfig: TokenUtils.getConfigInfo(),
         endpoints: {
             auth: '/api/auth',
             budget: '/api/budget',
             recurringTransactions: '/api/recurring-transactions',
             goals: '/api/goals',
-            notifications: '/api/notifications'
+            notifications: '/api/notifications',
+            profile: '/api/profile'
         }
     });
 });
 
-// Rota para status dos cron jobs (apenas para desenvolvimento)
+// NOVO: Rota para testar CORS
+app.get('/api/cors-test', (req, res) => {
+    res.status(200).json({
+        message: 'CORS está funcionando!',
+        origin: req.headers.origin || 'no origin',
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Rotas de sistema existentes (sem mudanças)
 app.get('/api/system/cron-status', (req, res) => {
     const status = CronService.getTasksStatus();
     res.status(200).json({ cron_tasks: status });
 });
 
-// Rota para executar tarefas de notificação manualmente
 app.post('/api/system/run-notifications', async (req, res) => {
     try {
         const result = await CronService.runNotificationTasksNow();
@@ -59,7 +84,6 @@ app.post('/api/system/run-notifications', async (req, res) => {
     }
 });
 
-// NOVA ROTA: Executar limpeza manual
 app.post('/api/system/cleanup', async (req, res) => {
     try {
         const result = await runFullCleanup();
@@ -92,7 +116,10 @@ app.get('/api/system/storage-status', async (req, res) => {
     }
 });
 
-// Função de inicialização
+// NOVO: Middleware de tratamento de erros de CORS
+app.use(corsErrorHandler);
+
+// Função de inicialização (sem mudanças)
 async function initializeApp() {
     try {
         console.log('🚀 Inicializando PoupaDin Backend...');
@@ -129,7 +156,7 @@ async function initializeApp() {
         console.log('⏰ Inicializando serviços de cron...');
         CronService.init();
         
-        // NOVO: Executar limpeza inicial
+        // Executar limpeza inicial
         console.log('🧹 Executando limpeza inicial...');
         await runFullCleanup();
         
@@ -137,7 +164,7 @@ async function initializeApp() {
         
     } catch (error) {
         console.error('💥 Erro na inicialização:', error);
-        process.exit(1); // Parar aplicação se configuração estiver incorreta
+        process.exit(1);
     }
 }
 
@@ -149,12 +176,14 @@ const server = app.listen(PORT, async () => {
     console.log(`🔄 Recurring Transactions API available at http://localhost:${PORT}/api/recurring-transactions`);
     console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`);
     console.log(`🔔 Notifications API available at http://localhost:${PORT}/api/notifications`);
+    console.log(`👤 Profile API available at http://localhost:${PORT}/api/profile`);
+    console.log(`🧪 CORS Test available at http://localhost:${PORT}/api/cors-test`);
     
     // Inicializar aplicação
     await initializeApp();
 });
 
-// Graceful shutdown
+// Graceful shutdown (sem mudanças)
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM recebido, parando serviços...');
     CronService.stopAll();
