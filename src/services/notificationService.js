@@ -188,9 +188,19 @@ class NotificationService {
         return processed;
     }
 
-    // Entregar notificação
+    // CORREÇÃO: Entregar notificação garantindo que notification tenha ID
     static async deliverNotification(notification) {
         try {
+            // CORREÇÃO: Garantir que a notificação tenha um ID válido
+            if (!notification.id) {
+                notification.id = 'notification-' + Date.now();
+            }
+
+            // CORREÇÃO: Garantir que campos obrigatórios existam
+            if (!notification.created_at) {
+                notification.created_at = new Date().toISOString();
+            }
+
             const deliveryMethods = notification.delivery_method.split(',');
             const results = [];
 
@@ -255,7 +265,9 @@ class NotificationService {
         } catch (error) {
             console.error('Erro ao entregar notificação:', error);
             
-            await notificationModel.updateNotificationStatus(notification.id, 'failed');
+            if (notification.id) {
+                await notificationModel.updateNotificationStatus(notification.id, 'failed');
+            }
             throw error;
         }
     }

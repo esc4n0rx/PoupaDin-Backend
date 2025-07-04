@@ -78,7 +78,7 @@ class PushNotificationService {
         }
     }
 
-    // Construir payload da mensagem FCM
+    // CORREÇÃO: Construir payload da mensagem FCM garantindo que todos os valores em 'data' sejam strings
     static buildMessagePayload(notification) {
         const payload = {
             notification: {
@@ -93,16 +93,23 @@ class PushNotificationService {
             }
         };
 
-        // Adicionar dados de ação se existirem
+        // CORREÇÃO: Converter action_data para string se existir
         if (notification.action_type && notification.action_data) {
             payload.data.action_type = notification.action_type;
             payload.data.action_data = JSON.stringify(notification.action_data);
         }
 
-        // Adicionar metadados se existirem
+        // CORREÇÃO: Converter metadata para string se existir
         if (notification.metadata) {
             payload.data.metadata = JSON.stringify(notification.metadata);
         }
+
+        // CORREÇÃO: Garantir que todos os valores em data sejam strings
+        Object.keys(payload.data).forEach(key => {
+            if (typeof payload.data[key] !== 'string') {
+                payload.data[key] = String(payload.data[key]);
+            }
+        });
 
         // Configurações específicas por plataforma
         payload.android = {
@@ -207,14 +214,19 @@ class PushNotificationService {
         return results;
     }
 
-    // Enviar notificação de teste
+    // CORREÇÃO: Enviar notificação de teste com payload válido
     static async sendTestNotification(userId, message = 'Esta é uma notificação de teste') {
         const testNotification = {
+            id: 'test-' + Date.now(),
             user_id: userId,
             title: '🧪 Teste - PoupaDin',
             body: message,
             type: 'system_update',
-            priority: 'normal'
+            priority: 'normal',
+            created_at: new Date().toISOString(),
+            action_type: 'open_app',
+            action_data: { screen: 'home' },
+            metadata: { test: true, timestamp: Date.now() }
         };
 
         return await this.sendPushNotification(testNotification);
